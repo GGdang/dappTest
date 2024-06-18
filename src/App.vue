@@ -4,19 +4,43 @@ import erc20ABI from '../src/abi/erc20'
 import { RouterLink, RouterView } from 'vue-router'
 import { Contract, ethers } from 'ethers'
 import { createWeb3Modal, defaultConfig, useWeb3ModalAccount } from '@web3modal/ethers5/vue'
+
+const { address, chainId, isConnected } = useWeb3ModalAccount()
 const signMessage = ref('')
+const userBalance = ref({
+  main: '0',
+  usdt: '0',
+  usdc: '0'
+})
+const nativeAmount = ref('0')
+const erc20Amount = ref('0')
+
 // 1. Get projectId at https://cloud.walletconnect.com
 const projectId = '97c2e47c2dee9a82d216339f564f2dbd'
 // 2. Set chains
-const mainnet = {
-  chainId: 11155111,
-  name: 'Ethereum',
-  currency: 'ETH',
-  // explorerUrl: 'https://etherscan.io',
-  // rpcUrl: 'https://cloudflare-eth.com'
-  explorerUrl: 'https://sepolia.etherscan.io/',
-  rpcUrl: 'https://endpoints.omniatech.io/v1/eth/sepolia/public'
-}
+const chains = [
+  {
+    chainId: 11155111,
+    name: 'Ethereum',
+    currency: 'ETH',
+    explorerUrl: 'https://sepolia.etherscan.io/',
+    rpcUrl: 'https://endpoints.omniatech.io/v1/eth/sepolia/public'
+  },
+  {
+    chainId: 80002,
+    name: 'Polygon Amoy',
+    currency: 'MATIC',
+    explorerUrl: 'https://amoy.polygonscan.com/',
+    rpcUrl: 'https://polygon-amoy.blockpi.network/v1/rpc/public	'
+  },
+  {
+    chainId: 97,
+    name: 'BNB Smart ChainTest',
+    currency: 'BNBt',
+    explorerUrl: 'https://testnet.bscscan.com/',
+    rpcUrl: 'https://endpoints.omniatech.io/v1/bsc/testnet/public'
+  }
+]
 // 3. Create your application's metadata object
 const metadata = {
   name: 'My Website',
@@ -39,16 +63,27 @@ const ethersConfig = defaultConfig({
 // 5. Create a Web3Modal instance
 const modal = createWeb3Modal({
   ethersConfig,
-  chains: [mainnet],
+  chains,
   projectId,
   enableAnalytics: true, // Optional - defaults to your Cloud configuration
   enableOnramp: true // Optional - false as default
 })
 
-const { address, chainId, isConnected } = useWeb3ModalAccount()
-
-// ---- test usdt contract
-const USDTAddress = '0x428Eec6a3CcAe60527AE47AC6e8f0f871283d8EB'
+// ---- test erc20 contract
+const supportTokens = {
+  Ethereum: {
+    USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
+  },
+  'Polygon Amoy': {
+    USDT: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
+    USDC: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'
+  },
+  'BNB Smart ChainTest': {
+    USDT: '0x55d398326f99059fF775485246999027B3197955',
+    USDC: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d'
+  }
+}
 
 // The ERC-20 Contract ABI, which is a common contract interface
 // for tokens (this is the Human-Readable ABI format)
@@ -57,18 +92,17 @@ const USDTAbi = erc20ABI
 async function getBalance() {
   try {
     console.log('----', address.value, chainId.value)
-    const walletProvider = modal.getWalletProvider()
-    // console.log('---', walletProvider)
-
-    if (!isConnected.value) throw Error('User disconnected')
-    if (walletProvider !== undefined && address.value !== undefined) {
-      const ethersProvider = new ethers.providers.Web3Provider(walletProvider)
-      const getEthers = await ethersProvider.getBalance(address.value)
-      const signer = await ethersProvider.getSigner()
-      // The Contract object
-      const USDTContract = new Contract(USDTAddress, USDTAbi, signer)
-      const USDTBalance = await USDTContract.balanceOf(address.value)
-    }
+    // const walletProvider = modal.getWalletProvider()
+    // // console.log('---', walletProvider)
+    // if (!isConnected.value) throw Error('User disconnected')
+    // if (walletProvider !== undefined && address.value !== undefined) {
+    //   const ethersProvider = new ethers.providers.Web3Provider(walletProvider)
+    //   const getEthers = await ethersProvider.getBalance(address.value)
+    //   const signer = await ethersProvider.getSigner()
+    //   // The Contract object
+    //   const USDTContract = new Contract(USDTAddress, USDTAbi, signer)
+    //   const USDTBalance = await USDTContract.balanceOf(address.value)
+    // }
   } catch (error) {
     console.log('getBalance error:', error)
   }
@@ -120,44 +154,6 @@ async function sendEth() {
   }
 }
 
-async function mnemonicSendUsdt() {
-  try {
-    const mnemonic =
-      'cross select eight science grief taste climb bind gadget number material alley'
-    const rpc = `https://eth-sepolia.g.alchemy.com/v2/ZcZCvZMQ4ac0jBAlzS06FVrYffz9AW13`
-    console.log(1)
-
-    const provider = await new ethers.providers.JsonRpcProvider(rpc)
-    console.log(2)
-    const wallet = await ethers.Wallet.fromMnemonic(mnemonic).connect(provider)
-    console.log(3)
-    const nonce = await wallet.getTransactionCount()
-    console.log('---nonce---', nonce)
-    const erc20Contract = await new ethers.Contract(
-      '0x428Eec6a3CcAe60527AE47AC6e8f0f871283d8EB',
-      erc20ABI,
-      wallet
-    )
-    console.log(5)
-    const signedTx = await erc20Contract.transfer(
-      '0xD2B7b2E073A1e36326ba5d40A9f042846Ef4A4A3',
-      ethers.utils.parseUnits('1', 6),
-      {
-        gasLimit: 100000,
-        nonce: nonce,
-        gasPrice: ethers.utils.parseUnits('150', 'gwei')
-      }
-    )
-    console.log('----signedTx----', signedTx)
-
-    // 簽署交易並發送
-    const txhash = await signedTx.wait()
-    console.log('----txhash----', txhash)
-  } catch (error) {
-    console.log(error)
-  }
-}
-
 async function signMsg() {
   const walletProvider = modal.getWalletProvider()
   if (walletProvider !== undefined && address.value !== undefined) {
@@ -170,100 +166,66 @@ async function signMsg() {
 </script>
 
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
-    <div>
-      <!-- <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/about">About</RouterLink>
-        <RouterLink to="/walletConnect">walletConnect</RouterLink>
-      </nav> -->
-      <div>
-        <button @click="modal.open()">Open Connect Modal</button>
-        <button @click="modal.disconnect()">Disconnect Modal</button>
-        <button @click="modal.open({ view: 'Networks' })">Open Network Modal</button>
-      </div>
-
-      <div>
-        <textarea v-model="signMessage" cols="30" rows="10"></textarea>
-        <button @click="signMsg">signMessage</button>
-      </div>
-
-      <div>
-        <button @click="getBalance">get balance</button>
-        <button @click="sendBalance">send usdt balance</button>
-        <button @click="sendEth">send eth balance</button>
-      </div>
-    </div>
-  </header>
-
+  <v-row>
+    <v-col cols="4">
+      <v-btn color="blue" block elevation="4" @click="modal.open()">Open Connect Modal</v-btn>
+    </v-col>
+    <v-col cols="4">
+      <v-btn color="black" block elevation="4" @click="modal.disconnect()">Disconnect Modal</v-btn>
+    </v-col>
+    <v-col cols="4">
+      <v-btn color="purple" block elevation="4" @click="modal.open({ view: 'Networks' })"
+        >Open Network Modal</v-btn
+      >
+    </v-col>
+  </v-row>
+  <div class="mb-5"></div>
+  <v-row>
+    <v-col cols="4">
+      <v-card variant="outlined">
+        <v-card-title> 使用者的餘額 </v-card-title>
+        <v-card-text> 原生幣:{{ userBalance.main }} </v-card-text>
+        <v-card-text> USDT:{{ userBalance.usdt }} </v-card-text>
+        <v-card-text> USDC:{{ userBalance.usdc }} </v-card-text>
+      </v-card>
+      <div class="mb-2"></div>
+      <v-btn color="black" block elevation="4" @click="getBalance">get balance</v-btn>
+    </v-col>
+  </v-row>
+  <div class="mb-5"></div>
+  <v-row>
+    <v-col cols="4">
+      <v-textarea
+        v-model="signMessage"
+        no-resize
+        rows="6"
+        bg-color="grey-lighten-2"
+        label="輸入要簽名的內容"
+        variant="solo"
+      ></v-textarea>
+      <v-btn color="purple" block elevation="4" @click="signMsg">signMessage</v-btn>
+    </v-col>
+    <v-col cols="4">
+      <v-text-field
+        v-model="nativeAmount"
+        label="輸入數量"
+        bg-color="grey-lighten-2"
+        variant="outlined"
+      ></v-text-field>
+      <v-btn color="purple" block elevation="4" @click="sendEth">send native balance</v-btn>
+    </v-col>
+    <v-col cols="4">
+      <v-text-field
+        v-model="erc20Amount"
+        label="輸入數量"
+        bg-color="grey-lighten-2"
+        variant="outlined"
+      ></v-text-field>
+      <v-btn color="purple" block elevation="4" @click="sendBalance">send usdt balance</v-btn>
+    </v-col>
+  </v-row>
+  <div class="mb-5"></div>
   <RouterView />
 </template>
 
-<style scoped>
-header {
-  line-height: 1.5;
-  max-height: 100vh;
-}
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-nav {
-  width: 100%;
-  font-size: 12px;
-  text-align: center;
-  margin-top: 2rem;
-}
-
-nav a.router-link-exact-active {
-  color: var(--color-text);
-}
-
-nav a.router-link-exact-active:hover {
-  background-color: transparent;
-}
-
-nav a {
-  display: inline-block;
-  padding: 0 1rem;
-  border-left: 1px solid var(--color-border);
-}
-
-nav a:first-of-type {
-  border: 0;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .wrapper {
-    /* display: flex; */
-  }
-
-  nav {
-    text-align: left;
-    margin-left: -1rem;
-    font-size: 1rem;
-
-    padding: 1rem 0;
-    margin-top: 1rem;
-  }
-}
-</style>
+<style lang="scss" scoped></style>
